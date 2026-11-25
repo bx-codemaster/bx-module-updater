@@ -48,7 +48,10 @@ class bx_module_updater {
             'owner'        => 'bx-codemaster',
             'repo'         => 'bx-module-updater',
             'key'          => 'HoSlvK+2xyw5I3FgoyYjiRcwLwNWfgt4ffzZHRZMT+Q=',
-            'allowed_paths' => ['admin/includes/modules/system'],
+            'allowed_paths' => [
+                'admin/includes/modules/system',
+                'admin/includes/classes/BX/Github',
+            ],
         ],
         'bx_block_contacts' => [
         'prefix'       => 'BX_BLOCK_CONTACTS',
@@ -74,7 +77,7 @@ class bx_module_updater {
             'repo'         => 'bx-advent-calendar',
             'key'          => 'ZgJA/UwCAN1f0IbmsT81ZNFkwjcIoIQsNZB+x4Va1DM=',  // ← DEIN PUBLIC KEY
             'allowed_paths' => [
-                'admin/includes/classes',
+                'admin/includes/classes/BX/Github',
                 'admin/includes/extra/csrf_exclusion',
                 'admin/includes/extra/css',
                 'admin/includes/extra/javascript',
@@ -280,17 +283,22 @@ class bx_module_updater {
     /**
      * Erstellt Updater-Instanz für Selbstupdate
      */
-    private function getGithubUpdater(): BxGithubModuleUpdater {
+    private function getGithubUpdater(): BxGithubModuleUpdater
+    {
         if ($this->githubUpdater === null) {
+            // Key aus KNOWN_MODULES holen (bx_module_updater Eintrag)
+            $myKey = self::KNOWN_MODULES['bx_module_updater']['key'] ?? 'RhVqKVDgRLHueQs0eYZBgbhU++wzMY5XETzYL+z5q3A=';
+            
             $this->githubUpdater = new BxGithubModuleUpdater([
                 'owner'         => 'bx-codemaster',
                 'repo'          => 'bx-module-updater',
                 'module_name'   => 'bx-module-updater',
                 'module_prefix' => 'BX_MODULE_UPDATER',
                 'admin_dir'     => DIR_ADMIN,
-                'public_key'    => 'RhVqKVDgRLHueQs0eYZBgbhU++wzMY5XETzYL+z5q3A=', // derselbe Key wie bx-block-contacts (Org-Key)
+                'public_key'    => $myKey,  // ← Key aus KNOWN_MODULES
                 'allowed_paths' => [
                     'admin/includes/classes/BX/Github',
+                    'admin/classes/BX/Github',
                     'admin/includes/modules/system',
                     'lang/english/modules/system',
                     'lang/german/modules/system',
@@ -480,6 +488,9 @@ class bx_module_updater {
         // Updater-Info
         $html .= '<a class="button btnbox txta-c" style="flex: 1 1 10%;" href="' . xtc_href_link(FILENAME_MODULE_EXPORT, 'set=system&module=' . $this->code . '&action=edit&view=info') . '">Updater-Info</a>';
 
+        // Security-Keys
+        $html .= '<a class="button btnbox txta-c" style="flex: 1 1 10%;" href="' . xtc_href_link(FILENAME_MODULE_EXPORT, 'set=system&module=' . $this->code . '&action=edit&view=security') . '">Security-Keys generieren</a>';
+
         $html .= '</div>';
 
         // Audit-Log anzeigen falls angefordert
@@ -488,6 +499,9 @@ class bx_module_updater {
         }
         if (($_GET['view'] ?? '') === 'info') {
             $html .= $this->renderUpdaterInfo();
+        }
+        if (($_GET['view'] ?? '') === 'security') {
+            $html .= $this->generateSecurityKeys();
         }
 
         return $html;
@@ -654,5 +668,21 @@ class bx_module_updater {
             return false;
         }
         return rmdir($realPath);
+    }
+
+    private function generateSecurityKeys(): string {
+        $keypair = sodium_crypto_sign_keypair();
+        $secret  = sodium_crypto_sign_secretkey($keypair);
+        $public  = sodium_crypto_sign_publickey($keypair);
+
+        $privateB64 = base64_encode($secret);
+        $publicB64  = base64_encode($public);
+
+        $html = '<p>PRIVATE (GitHub Secret BX_RELEASE_SIGNING_KEY):<br>' 
+               . htmlspecialchars($privateB64, ENT_QUOTES, 'UTF-8') . '</p>'
+               . '<p>PUBLIC (KNOWN_MODULES[\'MODULE_NAME\'][\'key\']):<br>' 
+               . htmlspecialchars($publicB64, ENT_QUOTES, 'UTF-8') . '</p>';
+
+        return $html;
     }
 }
