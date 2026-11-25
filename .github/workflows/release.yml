@@ -51,8 +51,6 @@ jobs:
               rel = path.relative_to(root).as_posix()
               if rel in (".bx-module-manifest.json", ".bx-module-manifest.sig"):
                   continue
-              if "BxGithubModuleUpdater.php" in rel:
-                  continue
               files[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
 
           # 2. Manifest schreiben (OHNE eigenen Eintrag!)
