@@ -17,7 +17,7 @@ declare(strict_types=1);
  * - Diagnose-Tools
  *
  * @package    BX\ModuleUpdater
- * @version    1.1.0
+ * @version    1.2.0
  * @author     Axel Benkert <mail@bx-coding.de>
  * @copyright  2026-present BX Coding
  * @license    GNU General Public License, version 2 or later
@@ -40,68 +40,6 @@ class bx_module_updater {
     private ?BxGithubModuleUpdater $githubUpdater = null;
     private ?array $updateStatus = null;
     public string $development_status = 'p';
-
-    // Bekannte Produktmodule, die den Updater nutzen (für Auto-Discovery)
-    private const KNOWN_MODULES = [
-        'bx_module_updater' => [
-            'prefix'       => 'BX_MODULE_UPDATER',
-            'owner'        => 'bx-codemaster',
-            'repo'         => 'bx-module-updater',
-            'key'          => 'HoSlvK+2xyw5I3FgoyYjiRcwLwNWfgt4ffzZHRZMT+Q=',
-            'allowed_paths' => [
-                'admin/includes/modules/system',
-                'admin/includes/classes/BX/Github',
-            ],
-        ],
-        'bx_block_contacts' => [
-        'prefix'       => 'BX_BLOCK_CONTACTS',
-        'owner'        => 'bx-codemaster',
-        'repo'         => 'bx-block-contacts',
-        'key'          => 'RhVqKVDgRLHueQs0eYZBgbhU++wzMY5XETzYL+z5q3A=',
-        'allowed_paths' => [
-            'admin/includes/classes/BX/Github',
-            'admin/includes/extra/functions',
-            'admin/includes/extra/css',
-            'admin/includes/modules/system',
-            'admin/images/icons/heading',
-            'lang/english/extra/admin',
-            'lang/english/modules/system',
-            'lang/german/extra/admin',
-            'lang/german/modules/system',
-            'media/content',
-            ],
-        ],
-        'bx_advent_calendar' => [
-            'prefix'       => 'BX_ADVENT_CALENDAR',
-            'owner'        => 'bx-codemaster',
-            'repo'         => 'bx-advent-calendar',
-            'key'          => 'ZgJA/UwCAN1f0IbmsT81ZNFkwjcIoIQsNZB+x4Va1DM=',  // ← DEIN PUBLIC KEY
-            'allowed_paths' => [
-                'admin/includes/classes/BX/Github',
-                'admin/includes/extra/csrf_exclusion',
-                'admin/includes/extra/css',
-                'admin/includes/extra/javascript',
-                'admin/includes/extra/filenames',
-                'admin/includes/extra/menu',
-                'admin/includes/modules/system',
-                'admin/images/icons/heading',
-                'admin',
-                'includes/extra/database_tables',
-                'includes/extra/wysiwyg',
-                'includes/extra/header/header_head',
-                'includes/classes',
-                'lang/english/extra/admin',
-                'lang/english/modules/system',
-                'lang/german/extra/admin',
-                'lang/german/modules/system',
-                'media/content',
-                'templates/tpl_modified_nova/css',
-                'templates/tpl_modified_nova/module',
-                'templates/tpl_modified_nova/javascript/extra',
-            ],
-        ],
-        // Weitere Module hier eintragen oder per Scan ermitteln
-    ];
 
     public function __construct() {
         require_once DIR_FS_ADMIN . 'includes/classes/BX/Github/BxGithubModuleUpdater.php';
@@ -160,8 +98,6 @@ class bx_module_updater {
             $messageStack->add_session('Force-Check für alle Module angestoßen.', 'success');
             xtc_redirect(xtc_href_link(FILENAME_MODULE_EXPORT, 'set=system&module=' . $this->code . '&action=edit'));
         }
-
-        //xtc_redirect(xtc_href_link(FILENAME_MODULE_EXPORT, 'set=system&module=' . $this->code . '&action=edit'));
     }
 
     public function display(): array {
@@ -286,16 +222,16 @@ class bx_module_updater {
     private function getGithubUpdater(): BxGithubModuleUpdater
     {
         if ($this->githubUpdater === null) {
-            // Key aus KNOWN_MODULES holen (bx_module_updater Eintrag)
-            $myKey = self::KNOWN_MODULES['bx_module_updater']['key'] ?? 'RhVqKVDgRLHueQs0eYZBgbhU++wzMY5XETzYL+z5q3A=';
-            
+            $modules = $this->getKnownModules();
+            $myKey = $modules['bx_module_updater']['key'] ?? 'RhVqKVDgRLHueQs0eYZBgbhU++wzMY5XETzYL+z5q3A=';
+
             $this->githubUpdater = new BxGithubModuleUpdater([
                 'owner'         => 'bx-codemaster',
                 'repo'          => 'bx-module-updater',
                 'module_name'   => 'bx-module-updater',
                 'module_prefix' => 'BX_MODULE_UPDATER',
                 'admin_dir'     => DIR_ADMIN,
-                'public_key'    => $myKey,  // ← Key aus KNOWN_MODULES
+                'public_key'    => $myKey,
                 'allowed_paths' => [
                     'admin/includes/classes/BX/Github',
                     'admin/classes/BX/Github',
@@ -319,8 +255,9 @@ class bx_module_updater {
      */
     private function getInstalledModulesWithUpdater(): array {
         $modules = [];
+        $knownModules = $this->getKnownModules();
 
-        foreach (self::KNOWN_MODULES as $code => $info) {
+        foreach ($knownModules as $code => $info) {
             $versionKey = 'MODULE_' . $info['prefix'] . '_VERSION';
             $statusKey  = 'MODULE_' . $info['prefix'] . '_STATUS';
             $titleKey   = 'MODULE_' . $info['prefix'] . '_TITLE';
@@ -330,11 +267,15 @@ class bx_module_updater {
                 continue; // Modul nicht installiert → überspringen
             }
 
+            $rawStatus = constant('MODULE_' . $info['prefix'] . '_STATUS');
+            $val = strtolower(trim((string) $rawStatus));
+            $enabled = in_array($val, ['true', '1', 'yes', 'on'], true);
+
             $modules[$code] = [
                 'code'        => $code,
                 'title'       => defined($titleKey) ? constant($titleKey) : $code,
                 'version'     => constant($versionKey),
-                'enabled'     => strtolower((string) constant($statusKey)) === 'true',
+                'enabled'     => $enabled,
                 'prefix'      => $info['prefix'],
                 'owner'       => $info['owner'],
                 'repo'        => $info['repo'],
@@ -601,11 +542,11 @@ class bx_module_updater {
                     'module_prefix'   => $mod['prefix'],
                     'admin_dir'       => DIR_ADMIN,
                     'public_key'      => $mod['public_key'],
-                    'allowed_paths'   => ['admin/includes/modules/system'],  // ← MINIMAL: nur Systemmodul-Pfad
+                    'allowed_paths'   => ['admin/includes/modules/system'],
                     'current_version' => constant('MODULE_' . $mod['prefix'] . '_VERSION'),
-                    'cache_ttl_seconds' => 60,  // Kurz für Force-Check
+                    'cache_ttl_seconds' => 60,
                 ]);
-                $updater->checkForUpdate(true); // force refresh
+                $updater->checkForUpdate(true);
             } catch (Throwable $e) {
                 error_log('BX Module Updater Force-Check failed for ' . $mod['code'] . ': ' . $e->getMessage());
             }
@@ -678,11 +619,44 @@ class bx_module_updater {
         $privateB64 = base64_encode($secret);
         $publicB64  = base64_encode($public);
 
-        $html = '<p>PRIVATE (GitHub Secret BX_RELEASE_SIGNING_KEY):<br>' 
+        $html = '<p>PRIVATE (GitHub Secret BX_RELEASE_SIGNING_KEY):<br>'
                . htmlspecialchars($privateB64, ENT_QUOTES, 'UTF-8') . '</p>'
-               . '<p>PUBLIC (KNOWN_MODULES[\'MODULE_NAME\'][\'key\']):<br>' 
+               . '<p>PUBLIC (KNOWN_MODULES[\'MODULE_NAME\'][\'key\']):<br>'
                . htmlspecialchars($publicB64, ENT_QUOTES, 'UTF-8') . '</p>';
 
         return $html;
+    }
+
+    private function getConfigDir(): string
+    {
+        return DIR_FS_ADMIN . 'includes/extra/bx_config/';
+    }
+
+    private function getKnownModules(): array
+    {
+        static $cache = null;
+        if ($cache !== null) return $cache;
+
+        $registryPath = $this->getConfigDir() . 'bx_module_registry.php';
+        if (!is_file($registryPath)) {
+            return [];
+        }
+
+        $registry = include $registryPath;
+        $modules = [];
+        $configDir = $this->getConfigDir();
+
+        foreach ($registry as $code => $relPath) {
+            $fullPath = $configDir . $relPath;
+            if (is_file($fullPath)) {
+                $config = include $fullPath;
+                if (is_array($config)) {
+                    $modules[$code] = $config;
+                    $modules[$code]['code'] = $code;
+                }
+            }
+        }
+
+        return $cache = $modules;
     }
 }
